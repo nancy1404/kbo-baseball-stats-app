@@ -1,0 +1,717 @@
+---
+title: "KBO STATS"
+author: "Nancy Kwak"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# here's the package you need to install if you haven't.
+
+options(repos=c(CRAN = "https://cloud.r-project.org"))
+install.packages("readr")
+install.packages("dplyr")
+install.packages("ggplot2")
+install.packages("rvest")
+install.packages("tidyr")
+install.packages("stringr")
+install.packages("DataExplorer")
+install.packages("knitr")
+install.packages("tidyverse")
+
+```
+
+# 1. INTRODUCTION
+
+-   Before we start, make sure to have the "KBOstats2024.csv" file downloaded to reproduce this project! (accessible in github repository) \n
+-   repository link for your reference: <https://github.com/nancy1404/project2.git>
+
+## a. DATASET INFORMATION / SOURCES \n
+
+-   **WHAT'S THE CONTEXT OF THIS DATASET?** \n
+
+> My topic is the hitter statistics retrieved from 2024 Korean Baseball Organization (KBO) League (regular season only), where it evaluates each player's performance throughout the season. All the information are directly collected from the KBO League and include various performance metrics that are frequently updated for accuracy. All the stats collected through this specific site is specifically for international KBO fans since the official KBO Data Center only collects and provide data in Korean to public. \n
+
+-   **HYPERLINK / PICTURE**
+
+    -   [Here is a hyperlink to the general mykbostats.com website](mykbostats.com)
+    -   [Here is the specific data page I used for this project](https://mykbostats.com/stats/top/ops?pa_cutoff=223)
+
+![](https://i.ytimg.com/vi/yUhf8wjp5gc/maxresdefault.jpg) \*Logos of each teams currently in KBO League / [image found here](https://i.ytimg.com/vi/yUhf8wjp5gc/maxresdefault.jpg) \n
+
+-   **WHY DID I PICK THIS DATASET?**
+
+    -   I chose this dataset because I grew up loving Korean Baseball (thanks to my dad) and my interest in baseball and sports analytics led me to decide to major in SDS at UT. On top of that, since we have done a short analysis using data with MLB statistics, I thought it would be interesting to see how KBO League Statistics look like. \n
+
+-   **WHAT AM I INVESTIGATING?**
+
+    -   I decided to separate this project into three major parts. First, I want to investigate the overall trend that all KBO league players had for the 2024 season. So I will demonstrate how the variables such as OPS, BA, HR, and BB are distributed for all qualified players. Secondly, I want to investigate the relationship between these variables. So I will demonstrate OPS vs. SLG, BA vs. OBP, HR vs. PA, and SLG vs. AB. Finally, I want to see if the final rank of the team is due to that specific team's overall higher average of these variables (OPS, BA, HR, BB) among the players in that team. \n\n
+
+# 2. DATA PREPARATING \n
+
+## a. SCRAPING PROCESS \n
+
+-   **THE WAY I SCRAPED THE DATA AND IMPORTED IT**
+
+    -   I manually scraped the data from the website. I luckily had no problem of any NA values since the data itself was really organized from the beginning. I therefore was able to save the manually scraped data in Google sheet in .csv format, where I can directly import csv file into R using read.csv(). But I did only collected specific numbers of players with the minimum \*Plate Appearance (PA) with 233 or above so that I can still make meaningful comparisons with just the players who hit on the batting area enough times (233 is the half of the required plate appearance in the KBO League).
+
+        -   Plate Appearance (PA) would be explained in the table where I defined all the terms in this dataset below. \n
+
+\n
+
+-   **CHALLENGES I HAD**
+
+    -   Sicne the website only shows the speicific number of rows depending on the cutoff of PA, I had to decide where I wanted to cut off. At first I wanted to include every single one of players, but after careful consideration, I realized that it won't give me an accurate comparison if I, for example, include player who had only one PA since that player can't be accurately compared to other players who fulfuilled minimum PA. So I first thought of only having players who fulfilled PA but there were less than 100 players so I decided to include the players who fulfilled at least 233 PA, which is the half of the required PA in the league. Other than that, I didn't have any hard problems scraping the data. \n
+
+```{r include = FALSE}
+library(readr)
+KBO_stats <- read_csv("KBOstats2024.csv")
+```
+
+# 3. VARIABLE DESCRIPTION \n
+
+## a. CLEANED DATASET
+
+-   Here's how the final version of "final.KBOstats" looks like:
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+
+library(dplyr)
+
+final.KBOstats <- KBO_stats |>
+  select(Player, Team, OPS, BA, OBP, SLG, HR, BB, AB, PA)
+
+knitr::kable(head(final.KBOstats), caption = "head(final.KBOstats)")
+
+```
+
+\n
+
+## b. VARIABLES OF INTEREST
+
+-   ONLY included those who qualifies for at least half of required Plate Appearances (233). \n
+
+    | Variable | Type | Description |
+    |----|----|----|
+    | Player | Categorical | The name of the baseball player. |
+    | Team | Categorical | The name of the team the player belongs to. |
+    | OPS | Numeric | On-Base Plus Slugging; a combined measure of a player's ability to get on base and hit for power |
+    | BA | Numeric | Batting Average; the ratio of a player's hits to their total \*at-bats (AB). |
+    | OBP | Numeric | On-base Percentage; measures how often a player reaches bases (via hits, walks, or hit by pitch). |
+    | SLG | Numeric | Slugging Percentage; a measure of the power of a hitter, calculated as total bases divided by \*at-bats. |
+    | HR | Numeric | Home Runs; the total number of home runs hit by the player. |
+    | BB | Numeric | Walks; the number of times the player reached base via a base on balls. |
+    | AB | Numeric | At-Bats; the total number of official at-bats the player has had. |
+    | PA | Numeric | Plate Appearances; the total number of times the player appeared at the plate, including all outcomes (hits, walks, etc.). |
+
+# 4. UNIVARIATE ANALYSES (4 variables)
+
+-   For the univariate analyses, I chose "OPS", "BA", "HR", and "BB".
+-   Here, I am first going to see the trend of each chosen variables for the whole league for each players.
+
+## a. OPS (On-base Plus Slugging) - graph 4a
+
+> OPS = OBP (On-base Percentage) + SLG (Slugging Percentage) \n
+
+```{r echo = FALSE, warning=FALSE}
+
+# Univariate Analysis for OPS
+
+library(ggplot2)
+
+ggplot(final.KBOstats, aes(x=OPS)) +
+  geom_histogram(binwidth = 0.05, fill = "orange", color = "black") +
+  labs(
+    title = "Distribution of OPS (histogram)",
+    caption = "*OPS: On-base Percentage",
+    x = "OPS",
+    y = "Frequency"
+  )
+
+# Descriptive statistics for OPS
+
+OPS_desstats <- final.KBOstats |>
+  summarise(
+    Mean = round(mean(OPS),3),
+    Median = round(median(OPS),3), 
+    Minimum = round(min(OPS),3), 
+    Maximum = round(max(OPS),3), 
+    Standard_Deviation = round(sd(OPS),3)
+  )
+
+OPS_stats_table <- knitr::kable(
+  OPS_desstats,
+  caption = "Descriptive Statistics for OPS"
+)
+OPS_stats_table
+
+```
+
+### Graph 4A Brief Description \n
+
+-   First things first, the spread of OPS, indicated by the standard deviation, demonstrates the variability among player performance. The histogram for OPS shows that the data is slightly skewed right, which means only a few players have exceptionally high OPS scores. The OPS values are clustered around the mean value which is `r round(mean(final.KBOstats$OPS),3)`, with a central tendency that we can quantify using the mean and median.
+-   The mean and median help to understand the typical OPS, while the standard deviation provides the insight into the overall spread.\n\n
+
+#### BEST & WORST OPS! \n
+
+```{r echo = FALSE, warning=FALSE}
+
+# top 3 players with best OPS.
+best_OPS <- final.KBOstats |>
+  arrange(desc(OPS)) |>
+  slice_head(n=3)
+
+# top 3 players with worst OPS.
+worst_OPS <- final.KBOstats |>
+  arrange(OPS) |>
+  slice_head(n=3)
+
+knitr::kable(best_OPS, caption = "Best OPS")
+knitr::kable(worst_OPS, caption = "Worst OPS")
+
+```
+
+-   Above, I reported 3 players with best OPS values, and 3 players with worst OPS values.
+-   For the three players who had the highest OPS values, the average was `r round(mean(best_OPS$OPS),3)` and for the three players who had the lowest OPS values, the average was `r round(mean(worst_OPS$OPS),3)`. The difference was `r (1.038-0.601)`, which was significant amount of difference in baseball field. \n\n
+
+## b. BA (Batting Average) - graph 4b \n
+
+> BA = Player's Hits / Total AB \n
+
+```{r echo = FALSE, warning=FALSE}
+
+# Univariate Analysis for BA
+
+ggplot(final.KBOstats, aes(y=BA)) +
+  geom_boxplot(fill = "orange", color = "black") +
+  labs(
+    title = "Distribution of Batting Average (BA) (boxplot)",
+    y = "BA",
+    x = NULL
+  )
+
+# Descriptive Statistics for BA
+
+BA_desstats <- final.KBOstats |>
+  summarise(
+    Median = round(median(BA, na.rm = TRUE),3),
+    IQR = round(IQR(BA, na.rm = TRUE),4),
+    Variance = round(var(BA, na.rm = TRUE),5)
+  )
+
+BA_stats_table <- knitr::kable(
+  BA_desstats,
+  caption = "Descriptive Statistics for Batting Average (BA)"
+)
+BA_stats_table
+
+```
+
+### Graph 4B Brief Description
+
+-   First things first, the box plot of BA demonstrates the central tendency and spread of the data. The median was `r round(median(final.KBOstats$BA),2)`, which means the typical player has a bating average around this value, where the most players have a slightly below-average batting performance.
+-   The middle 50% of players' BA values are falling within an IQR (interquartile range) of `r round(IQR(final.KBOstats$BA),4)`, which suggests that the batting averages are relatively consistent among players.
+-   Finally, the variance of `r round(var(final.KBOstats$BA),5)` which indicates that most players' BA value are closely grouped around the median with pretty low overall variability.
+
+\n
+
+#### BEST & WORST BA! \n
+
+```{r echo = FALSE, warning=FALSE}
+
+# top 3 players with best BA.
+best_BA <- final.KBOstats |>
+  arrange(desc(BA)) |>
+  slice_head(n=3)
+
+# top 3 players with worst BA.
+worst_BA <- final.KBOstats |>
+  arrange(BA) |>
+  slice_head(n=3)
+
+knitr::kable(best_BA, caption = "Best BA")
+knitr::kable(worst_BA, caption = "Worst BA")
+
+```
+
+-   Above, I reported 3 players with best BA values, and 3 players with worst BA values.
+-   For the three players who had the highest OPS values, the average was `r round(mean(best_BA$BA),3)` and for the three players who had the lowest OPS values, the average was `r round(mean(worst_BA$BA),3)`. The difference was `r (0.355-0.21)`, which was significant amount of difference in baseball field. \n\n
+
+## c. HR (Home Runs). - graph 4c
+
+```{r echo = FALSE, warning=FALSE}
+
+# Univariate Analysis for HR
+
+ggplot(final.KBOstats, aes(x=HR)) +
+  geom_histogram(binwidth = 1, fill = "orange", color = "black") +
+  labs(
+    title = "Distribution of Home Runs (histogram)",
+    x = "HR",
+    y = "Frequency"
+  )
+
+# Descriptive Statistics for HR
+
+HR_desstats <- final.KBOstats |>
+  summarise(
+    Mean = round(mean(HR, na.rm = TRUE),2),
+    Standard_Deviation = round(sd(HR, na.rm = TRUE),2) ,
+    Minimum = round(min(HR, na.rm = TRUE),2),
+    Maximum = round(max(HR, na.rm = TRUE),2),
+    Range = round(max(HR, na.rm = TRUE) - min(HR, na.rm = TRUE),2)
+  )
+
+HR_stats_table <- knitr::kable(
+  HR_desstats,
+  caption = "Descriptive Statistics for Home Runs (HR)"
+)
+HR_stats_table
+
+```
+
+### Graph 4C Brief Description
+
+-   First things first, looking at the histogram, HR data is clearly right skewed, with most players hitting fewer home runs and only a few reaching high totals.
+-   The mean of HR was `r round(mean(final.KBOstats$HR),2)`, suggesting that on average players in this league hit slightly more than 12 home runs, but the standard deviation of `r round(sd(final.KBOstats$HR),2)` indicates lots of variability in home run counts.
+-   The range was `r round(max(final.KBOstats$HR) - min(final.KBOstats$HR),2)` which emphasizes the extreme variation, with some players hitting 0 home runs while others hitting 46.
+
+\n
+
+#### BEST & WORST HR! \n
+
+```{r echo = FALSE, warning=FALSE}
+
+# top 3 players with best HR.
+best_HR <- final.KBOstats |>
+  arrange(desc(HR)) |>
+  slice_head(n=3)
+
+# top 3 players with worst HR.
+worst_HR <- final.KBOstats |>
+  arrange(HR) |>
+  slice_head(n=3)
+
+knitr::kable(best_HR, caption = "Best HR")
+knitr::kable(worst_HR, caption = "Worst HR")
+
+```
+
+-   Above, I reported 3 players with best HR values, and 3 players with worst HR values.
+-   For the three players who had the highest HR values, the average was `r round(mean(best_HR$HR),2)` and for the three players who had the lowest HR values, the average was `r round(mean(worst_HR$HR),2)`. The difference was `r (40.33-0)`, which was significant amount of difference in baseball field. \n\n
+
+## d. BB (Walks) - graph 4d
+
+```{r echo = FALSE, warning=FALSE}
+
+# Univariate Analysis for BB
+
+ggplot(final.KBOstats, aes(x=BB)) +
+  geom_bar(fill = "orange", color = "black")+
+  labs(
+    title = "Frequency of Walks",
+    x = "BB",
+    y = "Count"
+  )
+
+BB_desstats <- final.KBOstats |>
+  summarise(
+    Mean = round(mean(BB, na.rm = TRUE),2),
+    Median = round(median(BB, na.rm = TRUE),2),
+    Standard_Deviation = round(sd(BB,na.rm=TRUE),2)
+  )
+
+BB_stats_table <- knitr::kable(
+  BB_desstats,
+  caption = "Descriptive Statistics for Walks (BB)"
+)
+BB_stats_table
+
+```
+
+### Graph 4D Brief Description
+
+-   The mean of BB was `r round(mean(final.KBOstats$BB),2)` and the median of BB was `r round(median(final.KBOstats$BB),2)` which was quite close, suggesting threre are no extreme skew, showing relatively symmetric distribution.
+-   The standard deviation was `r round(sd(final.KBOstats$BB),2)` which indicates moderate variability, showing that while most players' walk counts are around average, there are some considerably higher or lower counts in the league. This trend demonstrates a range of patience at the plate, where the notably high numbers of walks might be due to a keen eye for pitches or strategic batting approaches.
+
+\n
+
+#### BEST & WORST BB! \n
+
+```{r echo = FALSE, warning=FALSE}
+
+# top 3 players with best BB.
+best_BB <- final.KBOstats |>
+  arrange(desc(BB)) |>
+  slice_head(n=3)
+
+# top 3 players with worst BB.
+worst_BB <- final.KBOstats |>
+  arrange(BB) |>
+  slice_head(n=3)
+
+knitr::kable(best_BB, caption = "Best BB")
+knitr::kable(worst_BB, caption = "Worst BB")
+
+```
+
+-   Above, I reported 3 players with best BB values, and 3 players with worst BB values.
+-   For the three players who had the highest BB values, the average was `r round(mean(best_BB$BB),2)` and for the three players who had the lowest BB values, the average was `r round(mean(worst_BB$BB),2)`. The difference was `r (87-77.67)`, which was significant amount of difference in baseball field. \n\n
+
+# 5A. BIVARIATE ANALYSES
+
+> For the bivariate analyses, I chose "OPS vs. SLG", "BA vs. OBP", "HR vs. PA" and "SLG vs. AB". Through these analyses, we will be able to see if there are actually relationships between each variables and how they are related.
+
+\n\n
+
+## a. OPS vs. SLG - graph 5a \n
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+
+# scatter plot w/ regression line
+
+ggplot(final.KBOstats, aes(x=SLG, y=OPS)) +
+  geom_point(color = "orange", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "black", se = FALSE) +
+  labs(
+    title = "OPS vs. SLG (scatterplot)",
+    x = "SLG (Slugging Percentage)",
+    y = "OPS (On-base Plus Slugging)"
+  ) 
+
+# correlation coefficient
+knitr::kable(round(cor(final.KBOstats$OPS, final.KBOstats$SLG),3),
+             caption = "Correlation Coefficient for OPS vs. SLG")
+
+```
+
+### Graph 5a Brief Description \n
+
+-   A correlation coefficient was `r round(cor(final.KBOstats$OPS, final.KBOstats$SLG),3)` which indicates a very strong positive linear relationship between OPS and SLG. This type of relationship suggests that as SLG increases, OPS also increases, demonstrating that players who excel in power hitting generally have higher overall offensive performance.
+-   The scatter plot also shows this relationship clearly with points mostly following the linear regression line. \n\n
+
+## b. BA vs. OBP - graph 5b \n
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+
+# create a new variable called "On-base Effectiveness"
+
+final.KBOstats <- final.KBOstats |>
+  mutate(`On-base Effectiveness` = round(OBP / BA, 3))
+
+# example of how On-base effectiveness is shown in the modified dataset
+
+head(final.KBOstats) |>
+  select("Player", "Team",  "On-base Effectiveness" )
+
+# Visualizing On-Base Percentage
+
+ggplot(final.KBOstats, aes(x=`On-base Effectiveness`)) +
+  geom_histogram(fill = "lightpink", color = "black", bins = 20) +
+  labs(
+    title = "Distribution of On-Base Effectiveness (histogram)",
+    x = "On-Base Effectiveness (OBP/BA)",
+    y = "Frequency"
+  )
+
+# Scatter plot w/ regression line
+
+ggplot(final.KBOstats, aes(x=BA, y = OBP)) +
+  geom_point(color = "orange", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "black", se = FALSE) +
+  labs(
+    title = "BA vs. OBP (scatterplot)",
+    x = "BA (Batting Average)",
+    y = "OBP (On-base Percentage)"
+  )
+
+# correlation coefficient
+knitr::kable(round(cor(final.KBOstats$BA, final.KBOstats$OBP),3),
+             caption = "Correlation Coefficient for BA vs. OBP")
+
+```
+
+### Graph 5b Brief Description \n
+
+-   First, I made a new variable called "on-base effectiveness" which is calculated by OBP divided by BA. The on-base effectiveness histogram shows that the distribution is slightly right-skewed, clustering primarily between 1.2 and 1.3, suggesting that most players' on-base abilities exceed their pure hitting abilities, probably due to walks or other strategies. \n
+-   Secondly, the scatter plot for BA vs. OBP shows a strong positive linear relationship, wich a correlation coefficient of `r round(cor(final.KBOstats$BA, final.KBOstats$OBP),3)`, demonstrating that players with higher batting averages tend to have higher on-base percentages. \n
+-   Combined together, these graphs show that while BA and OBP are closely related, some players have exceptional on-base effectiveness beyond what their BA alone showcases. This stats especially shows the possible impact of non-hit contributions, including walks or other individual strategies. \n\n
+
+## c. HR vs. PA - graph 5c \n
+
+```{r echo = FALSE, warning=FALSE}
+
+# create a new variable called "Power Ratio"
+
+final.KBOstats <- final.KBOstats |>
+  mutate(`Power Ratio` = round(HR / PA, 3))
+
+# example of how Power Ratio is shown in the modified data set
+
+head(final.KBOstats) |>
+  select("Player", "Team",  "Power Ratio" )
+
+# Visualizing Power Ratio (histogram)
+
+ggplot(final.KBOstats, aes(x=`Power Ratio`)) +
+  geom_histogram(fill = "lightpink", color = "black", bins = 20) +
+  labs(
+    title = "Distribution of Power Ratio (histogram)",
+    x = "Power Ratio (HR/PA)",
+    y = "Frequency"
+  )
+
+# Scatter plot w/ regression line
+
+ggplot(final.KBOstats, aes(x=PA, y = HR)) +
+  geom_point(color = "orange", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "black", se = FALSE) +
+  labs(
+    title = "HR vs. PA (scatterplot)",
+    x = "PA (Plate Appearances)",
+    y = "HR (Home Runs)"
+  )
+
+# correlation coefficient
+knitr::kable(round(cor(final.KBOstats$PA, final.KBOstats$HR),3),
+             caption = "Correlation Coefficient for PA vs. HR")
+
+```
+
+### Graph 5c Brief Description \n
+
+-   First, I made another new variable called "Power Ratio" which is calculated simply by dividing HR by PA. The power ratio distribution is right-skewed, with most values clustered between 0.02 and 0.03, which indicates that most players hit home runs at a relatively low rate compared to their plate appearances Furthermore, the skew trend suggests that there are only few players consistently achieve high home run frequencies. \n
+-   Secondly, the scatter plot for PA vs. HR demonstrates a moderately strong positive linear relationship, wtih a correlation coefficient of `r round(cor(final.KBOstats$PA, final.KBOstats$HR),3)`. However, this correlation is not too strong enough to have a straight conclusion. While opportunities to going at-bats do contribute to higher home run frequencies, individual power-hiting skills also play a role. \n\n
+
+## d. SLG vs. AB - graph 5a \n
+
+```{r echo = FALSE, warning=FALSE}
+
+# scatter plot w/ regression line
+
+ggplot(final.KBOstats, aes(x=AB, y=SLG)) +
+  geom_point(color = "orange", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "black", se = FALSE) +
+  labs(
+    title = "SLG vs. AB (scatterplot)",
+    x = "AB (At-Bats)",
+    y = "SLG (Slugging Percentage)"
+  ) 
+
+# correlation coefficient
+knitr::kable(round(cor(final.KBOstats$AB, final.KBOstats$SLG),3),
+             caption = "Correlation Coefficient for SLG vs. AB")
+
+```
+
+### Graph 5d Brief Description \n
+
+-   The scatter plot for SLG vs. AB shows a moderately linear relationship, with the correlation coefficient of `r round(cor(final.KBOstats$SLG, final.KBOstats$AB),3)`, suggesting there's a somewhat positive relationship between AB and SLG. This stats show that the players with more at-bats tend to have higher slugging percetages, though we cannot say with 100% confidence since the relationship isn't strong enough to make a certain conclusion.
+-   However, the moderate correlation iplies that while opportunity (more at-bats) may contribute to higher SLG, other factors including individual strategies or power hitting skil also could play an important role. \n\n
+
+# 5B. MULTIVARAITE ANALYSIS \n
+
+> I chose to look through 3 variables, OPS, BA, and HR, and make multivariate scatter plot. \n Here, I first reshaped HR into 3 categories: low, medium, and high (depending on which quartile each belongs to). I put sample examples as well.
+
+```{r echo = FALSE, warning=FALSE}
+
+# reshape HR into 3 categories (low, medium, high)
+
+final.KBOstats <- final.KBOstats |>
+  mutate(`HR Category` = case_when(
+    HR <= quantile(HR, 1/3) ~ "Low",
+    HR <= quantile(HR, 2/3) ~ "Medium",
+    TRUE ~ "High"
+  ))
+
+# example of how it looks like (random)
+
+sample_n(final.KBOstats, 6) |>
+  select("Player", "Team", "HR", "HR Category")
+
+```
+
+> Now, I used that HR Category for the size of the bubbles in the multivariate scatter plot, where the size of each bubble represents whether the player falls into the "Low", "Medium", or "High" HR Category.
+
+```{r echo = FALSE, warning=FALSE}
+
+# Scatter/bubble plot for OPS, BA, and HR Category
+
+ggplot(final.KBOstats, aes(x = OPS, y = BA, size = `HR Category`, color = `HR Category`)) +
+  geom_point(alpha=0.6) +
+  # setting bubble size for each category
+  scale_size_manual(values = c(10, 3, 7)) +
+  labs(
+    title = "Plot of OPs, BA, and HR Categories",
+    x = "OPS (On-base Plus Slugging)",
+    y = "BA (Batting Average)",
+    size = "HR Category",
+    color = "HR Category"
+  )
+  
+```
+
+### Brief Description \n
+
+-   The bubble plot shows a clear trend where the players with high HR values are located on the right side of the plot, indicating they tend to have higher OPS and BA. In other words, the players who hit more home runs also tend to be more efficient at getting on base and have higher batting averages, demonstrating their overall offensive power. \n
+-   On the other hand, players with lower HR are mostly located on the left side of the plot, where OPS and BA values are usually lower. This distribution emphasizes the idea that players with High Power (HR) are usually more consistent and effective across all aspects of hitting, including on-base ability and slugging. \n\n
+
+# 5C. TEAM ANALYSIS \n
+
+> First, here's the KBO League 2024 Standing for all 10 teams. \n
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+library(rvest)
+library(tidyr)
+library(stringr)
+
+stats_KBO <- data.frame(
+  "Standing" = read_html("https://mykbostats.com/standings") |>
+    html_elements(".left") |>
+    html_text(trim = TRUE))
+
+stats_KBO <- stats_KBO |>
+  mutate(Standing = str_squish(Standing))  
+# Removes extra whitespace and newlines
+
+# Separate the `Standing` column into `Rank` and `Team`
+stats_KBO <- stats_KBO |>
+  separate(Standing, into = c("Rank", "Team"), sep = " ", extra = "merge", fill = "right")
+
+# Step 3: Clean up the `Rank` and `Team` columns
+stats_KBO <- stats_KBO |>
+  mutate(
+    Rank = as.integer(Rank),
+    Team = str_squish(Team)  
+    # Clean any extra whitespace in Team names
+  )
+
+stats_KBO <- stats_KBO |>
+  filter(!is.na(Rank) & !is.na(Team))
+
+# View the result
+knitr::kable(stats_KBO, caption = "2024 KBO League Ranking")
+```
+
+> Now, merge this data to the "final.KBOstats" dataset so that we can compare against teams. \n Then I created a ggplot to see if the average performance for each team actually affects the final "Rank" for each team. \n
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+
+final.KBOstats <- final.KBOstats |>
+  left_join(stats_KBO, by = "Team")
+
+Averages <- final.KBOstats |>
+  group_by(Team, Rank) |>
+  summarise(
+    OPS = round(mean(OPS, na.rm = TRUE),3),
+    BA = round(mean(BA, na.rm = TRUE),3),
+    HR = round(mean(HR, na.rm = TRUE),1),
+    OBP = round(mean(OBP, na.rm = TRUE),3),
+  )
+
+Averages <- Averages |>
+  arrange(Rank)
+
+knitr::kable(Averages, caption = "Average Data for Each Team")
+
+ggplot(Averages, aes(x= OPS, y = Rank)) +
+  geom_point (color = "orange", size = 3) +
+  geom_smooth(method = "lm", color = "black") +
+  labs(
+    title = "Relationship Between Team Average OPS and Rank",
+    x = "Average OPS",
+    y = "Rank"
+  )
+
+ggplot(Averages, aes(x= BA, y = Rank)) +
+  geom_point (color = "orange", size = 3) +
+  geom_smooth(method = "lm", color = "black") +
+  labs(
+    title = "Relationship Between Team Average BA and Rank",
+    x = "Average BA",
+    y = "Rank"
+  )
+
+ggplot(Averages, aes(x= HR, y = Rank)) +
+  geom_point (color = "orange", size = 3) +
+  geom_smooth(method = "lm", color = "black") +
+  labs(
+    title = "Relationship Between Team Average HR and Rank",
+    x = "Average HR",
+    y = "Rank"
+  )
+
+ggplot(Averages, aes(x= OBP, y = Rank)) +
+  geom_point (color = "orange", size = 3) +
+  geom_smooth(method = "lm", color = "black") +
+  labs(
+    title = "Relationship Between Team Average OBP and Rank",
+    x = "Average OBP",
+    y = "Rank"
+  )
+
+knitr::kable(cor(Averages$Rank, Averages$OPS), caption = "Correlation Coefficient for Rank vs. OPS")
+knitr::kable(cor(Averages$Rank, Averages$BA), caption = "Correlation Coefficient for Rank vs. BA")
+knitr::kable(cor(Averages$Rank, Averages$HR), caption = "Correlation Coefficient for Rank vs. HR")
+knitr::kable(cor(Averages$Rank, Averages$OBP), caption = "Correlation Coefficient for Rank vs. OBP")
+
+```
+
+## Brief Description of Team Analysis \n
+
+-   All the graphs here shows the good negative linear relationships. And all the correlation coefficient values also is closer to -1, which means it has negative correlation, suggesting higher averages are associated with lower rank (better performance). So we can conclude that higher ranked teams tend to have higher average stats overall for OPS, BA, HR, and OBP. \n
+
+# 6. REPRODUCIBILITY RESOURCES \n
+
+-   In my project2 github private repository, I included KBOstats2024 original dataset, Project2.Rmd (this R Markdown file), knitted html Project2 file, and the README.md file which clearly explains all the packages you need to install to successfully reproduce this analysis report. \n
+-   [hyperlink to github repository](%22https://github.com/nancy1404/project2.git%22) \*only accessible by request.
+
+\n
+
+# 7. CHOICE ELEMENTS (at least 5) \n
+
+## a. In-line codes \n
+
+-   I used inline code in all of my univariate graph brief analyses (can be found all over through analyses of #4 in this .RMD report), mostly finding the mean of variables and reporting its difference between the best and worst. I used more than 4 in-line codes. \n
+
+## b. Create New variables \n
+
+-   First, I created the variable called "On-base Effectiveness" in 5A-b, which is calculated by OBP divided by BA. Along with it, I also made a histogram to see the distribution of this new variable.
+-   Secondly, I created another new variable called "Power Ratio" in 5A-c, which is calculated by HR divided by PA. Along with it, I also made a historgram to see the distribution of this new variable. \n
+
+## c. Reshape Variables of Interest \n
+
+-   In #5B Multivariate Analysis, I reshaped HR (one of the variable of my interest) into 3 categories: low, medium, and high (depending on which quartile each belongs to).
+
+## d. Multivariate Graph \n
+
+-   In #5B Multivariate Analysis, I chose to look through 3 variables, OPS, BA, and HR, and make multivariate scatter/bubble plot. I used that HR Category for the size of the bubbles in the multivariate scatter plot, where the size of each bubble represents whether the player falls into the "Low", "Medium", or "High" HR Category. \n
+
+## e. Web Scrape One variable of Interest &
+
+## f. Merging Dataset \n
+
+-   In 5C Team Analysis, I web scraped another data using the same website I used for collecting the original KBO Stats data. I chose to webscrape the categorical variable "Team" with the corresponding "Rank" for 2024 KBO Season. I merged this newly collected data with the final.KBOstats. \n\n
+
+# 8. CONCLUSION \n
+
+-   First things first, I investigated the overall trend that all KBO league players had for the 2024 season. The histogram I created for the univariate analyses all seemed right-skewed which means there are only few players who exceeded the average for each stats. And the box plot I created also indicated that most players have a slightly below-average batting performance, which all matched what I first expected.
+-   Secondly, for the analysis among two variables, all the line of regression showed the linear relationship which means if the players' stats for one thing is higher, usually that players' stats for other variables are also high.
+-   Last but not least, the relationship between the team's final standing and other variable stats showed that the team with higher rank tends to have higher average stats in all categories, which makes sense and matched what I expected as well. \n\n
+
+# 9. REFERENCES \n
+
+-   [Here is a hyperlink to the general mykbostats.com website](mykbostats.com)
+    -   mykbostats.com \n
+-   [Here is the specific data page I used for this project](https://mykbostats.com/stats/top/ops?pa_cutoff=223)
+    -   [https://mykbostats.com/stats/top/ops?pa_cutoff=223\\n](https://mykbostats.com/stats/top/ops?pa_cutoff=223\n){.uri}
+-   [image found here](https://i.ytimg.com/vi/yUhf8wjp5gc/maxresdefault.jpg)
+    -   <https://i.ytimg.com/vi/yUhf8wjp5gc/maxresdefault.jpg> \n
+-   [Here's a 2024 season standing data I added to merge](https://mykbostats.com/standings)
+    -   <https://mykbostats.com/standings>
